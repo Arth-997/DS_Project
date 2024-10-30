@@ -493,26 +493,26 @@ int main() {
     int transactionCounter = 1;
     long long timestamp = 1698147200;  // Starting timestamp
     srand(time(0));
-    std::vector<Transaction> transactions;
+//std::vector<Transaction> transactions;
 
-    // std::vector<Transaction> transactions = loadTransactionsFromFile("initial_transactions.txt");
+    std::vector<Transaction> transactions = loadTransactionsFromFile("initial_transactions.txt");
 
-    // // Process each transaction
-    // for (const auto& tx : transactions) {
-    //     fds.processTransaction(tx);
-    // }
+    // Process each transaction
+    for (const auto& tx : transactions) {
+        fds.processTransaction(tx);
+    }
     // Create fraudulent transactions
     // Frequent transactions to the same account
-    for (int i = 0; i < 5; ++i) {
-        int sender = 101;
-        int receiver = 102;
-        double amount = 20000.0;  // Large amount
-        std::string description = "Business payment";
-        std::string transactionID = std::to_string(transactionCounter++);
-        while (transactionID.length() < 6) transactionID = "0" + transactionID;
+    // for (int i = 0; i < 5; ++i) {
+    //     int sender = 101;
+    //     int receiver = 102;
+    //     double amount = 20000.0;  // Large amount
+    //     std::string description = "Business payment";
+    //     std::string transactionID = std::to_string(transactionCounter++);
+    //     while (transactionID.length() < 6) transactionID = "0" + transactionID;
 
-        transactions.push_back({ transactionID, sender, receiver, amount, timestamp++, description });
-    }
+    //     transactions.push_back({ transactionID, sender, receiver, amount, timestamp++, description });
+    // }
     // Circular transactions
     // std::vector<int> circularAccounts = {103, 104, 105, 103};
     // for (size_t i = 0; i < circularAccounts.size() - 1; ++i) {
