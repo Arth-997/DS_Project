@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <fstream>
 #include <utility>
+#include <limits> // For numeric_limits
 
 const int BLOOM_FILTER_SIZE = 10000;  // Increased size for larger dataset
 const int NUM_HASH_FUNCTIONS = 3;
@@ -70,6 +71,22 @@ private:
 public:
     BKTree() : root(nullptr) {}
 
+    ~BKTree() {
+        // Destructor to clean up nodes
+        if (root) {
+            std::queue<BKTreeNode*> nodes;
+            nodes.push(root);
+            while (!nodes.empty()) {
+                BKTreeNode* current = nodes.front();
+                nodes.pop();
+                for (auto& childPair : current->children) {
+                    nodes.push(childPair.second);
+                }
+                delete current;
+            }
+        }
+    }
+
     void insert(const std::string& word) {
         if (!root) {
             root = new BKTreeNode(word);
@@ -96,13 +113,13 @@ public:
             BKTreeNode* node = nodes.front();
             nodes.pop();
 
-            auto distance = levenshteinDistance(query, node->word);
-            if (distance <= maxDistance&&distance>0) {  /////////////////////////////////////////////////////
+            int distance = levenshteinDistance(query, node->word);
+            if (distance <= maxDistance && distance > 0) {  // distance > 0 to exclude exact matches
                 return true;
             }
 
             for (int i = distance - maxDistance; i <= distance + maxDistance; ++i) {
-                if (node->children.count(i)) {
+                if (i >= 0 && node->children.count(i)) {
                     nodes.push(node->children[i]);
                 }
             }
@@ -111,6 +128,7 @@ public:
     }
 };
 
+// Suffix Tree Node
 class SuffixTreeNode {
 public:
     std::unordered_map<char, SuffixTreeNode*> children;
@@ -126,6 +144,7 @@ public:
     }
 };
 
+// Suffix Tree for pattern detection
 class SuffixTree {
 private:
     SuffixTreeNode* root;
@@ -172,7 +191,6 @@ public:
     }
 };
 
-
 // Bloom Filter for fast flagged account detection
 class BloomFilter {
     std::bitset<BLOOM_FILTER_SIZE> filter;
@@ -216,8 +234,29 @@ public:
 
     FraudDetectionSystem() {}
 
+    ~FraudDetectionSystem() {
+        // Destructor to ensure all dynamically allocated memory is cleaned up
+    }
+
     void addAccount(int accountID, double initialBalance) {
+        if (accounts.find(accountID) != accounts.end()) {
+            std::cout << "Account ID " << accountID << " already exists." << std::endl;
+            return;
+        }
         accounts[accountID] = { accountID, initialBalance, {} };
+        std::cout << "Account ID " << accountID << " added with initial balance $" << initialBalance << "." << std::endl;
+    }
+
+    void bulkAddAccounts(int startID, int endID, double initialBalance) {
+        for (int i = startID; i <= endID; ++i) {
+            if (accounts.find(i) == accounts.end()) {
+                accounts[i] = { i, initialBalance, {} };
+                std::cout << "Account ID " << i << " added with initial balance $" << initialBalance << "." << std::endl;
+            } else {
+                std::cout << "Account ID " << i << " already exists. Skipping." << std::endl;
+            }
+        }
+        std::cout << "Bulk account addition completed." << std::endl;
     }
 
     void processTransaction(const Transaction& tx) {
@@ -248,7 +287,7 @@ public:
         std::istringstream iss(tx.description);
         std::string word;
         while (iss >> word) {
-            if (bkTree.search(word,2)) {  // Levenshtein distance <= 2
+            if (bkTree.search(word, 2)) {  // Levenshtein distance <= 2
                 isFraudulent = true;
                 fraudReason = "Suspicious word detected: '" + word + "'";
                 break;
@@ -273,7 +312,6 @@ public:
             suffixTree.clear();
         }
 
-
         // Velocity Fraud Detection
         if (!isFraudulent && detectVelocityFraud(tx.senderAccountID, tx.timestamp)) {
             isFraudulent = true;
@@ -287,11 +325,11 @@ public:
         }
 
         // Circular Transactions Detection
-        //add the edge to the graph
+        // Add the edge to the graph
         graphAdjacencyList[tx.senderAccountID].push_back(tx.receiverAccountID);
         if (!isFraudulent && detectCircularTransactions(tx.senderAccountID, tx.receiverAccountID)) {
             isFraudulent = true;
-            //remove the sender and receiver from the adjacency list
+            // Remove the sender and receiver from the adjacency list
             graphAdjacencyList[tx.senderAccountID].pop_back();
             fraudReason = "Circular transactions detected";
         }
@@ -399,8 +437,42 @@ public:
             std::cout << "Account ID: " << accountID << " does not exist." << std::endl;
         }
     }
-};
 
+    // Function to load suspicious patterns
+    void addSuspiciousPattern(const std::string& pattern) {
+        suspiciousPatterns.insert(pattern);
+    }
+
+    // Function to display all accounts
+    void displayAllAccounts() {
+        if (accounts.empty()) {
+            std::cout << "No accounts available." << std::endl;
+            return;
+        }
+        std::cout << "List of Accounts:" << std::endl;
+        for (const auto& pair : accounts) {
+            std::cout << "Account ID: " << pair.second.accountID << ", Balance: $" << pair.second.balance << std::endl;
+        }
+    }
+
+    // Function to display all transactions
+    void displayAllTransactions() {
+        if (transactions.empty()) {
+            std::cout << "No transactions available." << std::endl;
+            return;
+        }
+        std::cout << "List of Transactions:" << std::endl;
+        for (const auto& pair : transactions) {
+            const Transaction& tx = pair.second;
+            std::cout << "Transaction ID: " << tx.transactionID
+                      << ", Sender: " << tx.senderAccountID
+                      << ", Receiver: " << tx.receiverAccountID
+                      << ", Amount: $" << tx.amount
+                      << ", Timestamp: " << tx.timestamp
+                      << ", Description: " << tx.description << std::endl;
+        }
+    }
+};
 
 // Function to read words from a file and insert into BKTree
 void loadWordsIntoBKTree(const std::string& filename, BKTree& bkTree) {
@@ -418,7 +490,7 @@ void loadWordsIntoBKTree(const std::string& filename, BKTree& bkTree) {
     file.close();
 }
 
-// Function to read words from a file and insert into SuffixTree
+// Function to read words from a file and add to suspicious patterns
 void loadWordsIntoSuffixTree(const std::string& filename, SuffixTree& suffixTree, std::unordered_set<std::string>& suspiciousPatterns) {
     std::ifstream file(filename);
     std::string word;
@@ -428,9 +500,6 @@ void loadWordsIntoSuffixTree(const std::string& filename, SuffixTree& suffixTree
     }
 
     while (file >> word) {
-        // Insert into Suffix Tree
-       // suffixTree.insert(word);
-
         // Add suspicious words to the set
         suspiciousPatterns.insert(word);
     }
@@ -442,7 +511,7 @@ std::vector<Transaction> loadTransactionsFromFile(const std::string& filename) {
     std::vector<Transaction> transactions;
     std::ifstream infile(filename);
     if (!infile.is_open()) {
-        std::cerr << "Error opening file for reading." << std::endl;
+        std::cerr << "Error opening file for reading: " << filename << std::endl;
         return transactions;
     }
 
@@ -476,75 +545,136 @@ std::vector<Transaction> loadTransactionsFromFile(const std::string& filename) {
     return transactions;
 }
 
+// Function to display the menu
+void displayMenu() {
+    std::cout << "\n=== Fraud Detection System Menu ===\n";
+    std::cout << "1. Load BK Tree Words\n";
+    std::cout << "2. Load Suffix Tree Words\n";
+    std::cout << "3. Add Single Account\n";
+    std::cout << "4. Add Multiple Accounts\n";
+    std::cout << "5. Load Transactions from File\n";
+    std::cout << "6. Process Transactions\n";
+    std::cout << "7. Display All Accounts\n";
+    std::cout << "8. Display All Transactions\n";
+    std::cout << "9. Exit\n";
+    std::cout << "Please select an option (1-9): ";
+}
 
 int main() {
     FraudDetectionSystem fds;
+    bool exitProgram = false;
 
-    // Load words into BK Tree and Suffix Tree from different files
-    loadWordsIntoBKTree("bk_tree_words.txt", fds.bkTree);
-    loadWordsIntoSuffixTree("suffix_tree_words.txt", fds.suffixTree, fds.suspiciousPatterns);
+    while (!exitProgram) {
+        displayMenu();
+        int choice;
+        std::cin >> choice;
 
-    // Add accounts with initial balances
-    for (int i = 100; i < 200; ++i) {
-        fds.addAccount(i, 100000.0);
+        // Clear input buffer to handle any extra input
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+        switch (choice) {
+            case 1: {
+                // Load BK Tree Words
+                std::string filename;
+                std::cout << "Enter the filename for BK Tree words (e.g., bk_tree_words.txt): ";
+                std::getline(std::cin, filename);
+                loadWordsIntoBKTree(filename, fds.bkTree);
+                std::cout << "BK Tree words loaded successfully from " << filename << "." << std::endl;
+                break;
+            }
+            case 2: {
+                // Load Suffix Tree Words
+                std::string filename;
+                std::cout << "Enter the filename for Suffix Tree suspicious patterns (e.g., suffix_tree_words.txt): ";
+                std::getline(std::cin, filename);
+                loadWordsIntoSuffixTree(filename, fds.suffixTree, fds.suspiciousPatterns);
+                std::cout << "Suffix Tree suspicious patterns loaded successfully from " << filename << "." << std::endl;
+                break;
+            }
+            case 3: {
+                // Add Single Account
+                int accountID;
+                double initialBalance;
+                std::cout << "Enter Account ID (integer): ";
+                std::cin >> accountID;
+                std::cout << "Enter Initial Balance (e.g., 100000.0): ";
+                std::cin >> initialBalance;
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // Clear buffer
+                fds.addAccount(accountID, initialBalance);
+                break;
+            }
+            case 4: {
+                // Add Multiple Accounts
+                int startID, endID;
+                double initialBalance;
+                std::cout << "Enter starting Account ID (integer): ";
+                std::cin >> startID;
+                std::cout << "Enter ending Account ID (integer): ";
+                std::cin >> endID;
+                std::cout << "Enter Initial Balance for each account (e.g., 100000.0): ";
+                std::cin >> initialBalance;
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // Clear buffer
+                if (startID > endID) {
+                    std::cout << "Starting Account ID should be less than or equal to Ending Account ID." << std::endl;
+                } else {
+                    fds.bulkAddAccounts(startID, endID, initialBalance);
+                }
+                break;
+            }
+            case 5: {
+                // Load Transactions from File
+                std::string filename;
+                std::cout << "Enter the filename for initial transactions (e.g., initial_transactions.txt): ";
+                std::getline(std::cin, filename);
+                std::vector<Transaction> transactions = loadTransactionsFromFile(filename);
+                if (!transactions.empty()) {
+                    for (const auto& tx : transactions) {
+                        fds.processTransaction(tx);
+                    }
+                    std::cout << "Transactions loaded and processed successfully from " << filename << "." << std::endl;
+                } else {
+                    std::cout << "No transactions to process from " << filename << "." << std::endl;
+                }
+                break;
+            }
+            case 6: {
+                // Process Transactions
+                std::string filename;
+                std::cout << "Enter the filename for transactions to process (e.g., new_transactions.txt): ";
+                std::getline(std::cin, filename);
+                std::vector<Transaction> transactions = loadTransactionsFromFile(filename);
+                if (!transactions.empty()) {
+                    for (const auto& tx : transactions) {
+                        fds.processTransaction(tx);
+                    }
+                    std::cout << "Transactions processed successfully from " << filename << "." << std::endl;
+                } else {
+                    std::cout << "No transactions to process from " << filename << "." << std::endl;
+                }
+                break;
+            }
+            case 7: {
+                // Display All Accounts
+                fds.displayAllAccounts();
+                break;
+            }
+            case 8: {
+                // Display All Transactions
+                fds.displayAllTransactions();
+                break;
+            }
+            case 9: {
+                // Exit
+                std::cout << "Exiting the Fraud Detection System. Goodbye!" << std::endl;
+                exitProgram = true;
+                break;
+            }
+            default: {
+                std::cout << "Invalid option selected. Please try again." << std::endl;
+                break;
+            }
+        }
     }
-
-    // Generate 150 transactions
-    int transactionCounter = 1;
-    long long timestamp = 1698147200;  // Starting timestamp
-    srand(time(0));
-//std::vector<Transaction> transactions;
-
-    std::vector<Transaction> transactions = loadTransactionsFromFile("initial_transactions.txt");
-
-    // Process each transaction
-    for (const auto& tx : transactions) {
-        fds.processTransaction(tx);
-    }
-    // Create fraudulent transactions
-    // Frequent transactions to the same account
-    // for (int i = 0; i < 5; ++i) {
-    //     int sender = 101;
-    //     int receiver = 102;
-    //     double amount = 20000.0;  // Large amount
-    //     std::string description = "Business payment";
-    //     std::string transactionID = std::to_string(transactionCounter++);
-    //     while (transactionID.length() < 6) transactionID = "0" + transactionID;
-
-    //     transactions.push_back({ transactionID, sender, receiver, amount, timestamp++, description });
-    // }
-    // Circular transactions
-    // std::vector<int> circularAccounts = {103, 104, 105, 103};
-    // for (size_t i = 0; i < circularAccounts.size() - 1; ++i) {
-    //     int sender = circularAccounts[i];
-    //     int receiver = circularAccounts[i + 1];
-    //     double amount = 10000.0;
-    //     std::string description = "Circular transfer";
-    //     std::string transactionID = std::to_string(transactionCounter++);
-    //     while (transactionID.length() < 6) transactionID = "0" + transactionID;
-    //     Transaction tx;
-    //     tx.transactionID = transactionID;
-    //     tx.senderAccountID = sender;
-    //     tx.receiverAccountID = receiver;
-    //     tx.amount = amount;
-    //     tx.timestamp = timestamp++;
-    //     tx.description = description;
-    //     transactions.push_back(tx);
-    // }
-
-    // Process each transaction
-    for (const auto& tx : transactions) {
-        fds.processTransaction(tx);
-    }
-    // //print all the transactions
-    // for (const auto& tx : transactions) {
-    //     std::cout << "Transaction ID: " << tx.transactionID << " Sender: " << tx.senderAccountID << " Receiver: " << tx.receiverAccountID << " Amount: " << tx.amount << " Timestamp: " << tx.timestamp << " Description: " << tx.description << std::endl;
-    // }
-    // // Print account balances
-    // std::cout << "\nAccount Balances:" << std::endl;
-    // for (int i = 100; i < 200; ++i) {
-    //     fds.printAccountBalance(i);
-    // }
 
     return 0;
 }
