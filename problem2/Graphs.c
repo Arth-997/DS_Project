@@ -378,6 +378,10 @@ void process_transaction(Transaction *txn) {
            txn->transaction_id, txn->source, txn->destination, txn->amount, txn->fee, txn->path);
     
     // Append to transaction history
+    if (history_count >= MAX_TRANSACTIONS) {
+        printf("Warning: Maximum transaction history reached. Cannot store new transactions.\n");
+        return;
+    }
     transaction_history[history_count++] = *txn;
 }
 
